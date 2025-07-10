@@ -1,0 +1,31 @@
+({
+    handleSave: function(component, event, helper) {
+        let action = component.get("c.saveContact");
+        let contact = component.get("v.contact");
+
+        action.setParams({ contactRecord: contact });
+
+        action.setCallback(this, function(response) {
+            let state = response.getState();
+
+            if (state === "SUCCESS") {
+                let savedContact = response.getReturnValue();
+                component.set("v.message", "Contact saved successfully! Record ID: " + savedContact.Id);
+                component.set("v.isSuccess", true);
+                component.set("v.contact", { 'sobjectType': 'Contact' }); // Reset form
+            } else {
+                let errors = response.getError();
+                let message = "Unknown error";
+
+                if (errors && errors[0] && errors[0].message) {
+                    message = errors[0].message;
+                }
+
+                component.set("v.message", message);
+                component.set("v.isSuccess", false);
+            }
+        });
+
+        $A.enqueueAction(action);
+    }
+})
