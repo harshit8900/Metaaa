@@ -1,0 +1,69 @@
+public with sharing class AccountController {
+    
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getAccounts() {
+        return [SELECT Id, Name, Industry, Phone FROM Account LIMIT 10];
+    }
+}
+
+
+
+
+<template>
+    <lightning-card title="Account List from Apex" icon-name="standard:account">
+        <template if:true={accounts}>
+            <lightning-datatable
+                key-field="Id"
+                data={accounts}
+                columns={columns}
+                hide-checkbox-column="true">
+            </lightning-datatable>
+        </template>
+
+        <template if:true={error}>
+            <div class="slds-text-color_error">Error: {error}</div>
+        </template>
+    </lightning-card>
+</template>
+
+
+
+
+import { LightningElement, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountController.getAccounts';
+
+export default class AccountListLWC extends LightningElement {
+    accounts;
+    error;
+
+    columns = [
+        { label: 'Name', fieldName: 'Name' },
+        { label: 'Industry', fieldName: 'Industry' },
+        { label: 'Phone', fieldName: 'Phone', type: 'phone' }
+    ];
+
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.accounts = data;
+            this.error = undefined;
+        } else if (error) {
+            this.error = error.body.message;
+            this.accounts = undefined;
+        }
+    }
+}
+
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>59.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__RecordPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+</LightningComponentBundle>
