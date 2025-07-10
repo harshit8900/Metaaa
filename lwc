@@ -1,0 +1,90 @@
+<template>
+    <lightning-card title="Create Contact" icon-name="standard:contact">
+        <div class="slds-p-around_medium">
+            <lightning-input label="First Name" value={firstName} onchange={handleChange} name="firstName"></lightning-input>
+            <lightning-input label="Last Name" value={lastName} onchange={handleChange} name="lastName"></lightning-input>
+            <lightning-input label="Email" value={email} onchange={handleChange} name="email" type="email"></lightning-input>
+            <lightning-input label="Phone" value={phone} onchange={handleChange} name="phone" type="tel"></lightning-input>
+            <lightning-input label="Fax" value={fax} onchange={handleChange} name="fax" type="tel"></lightning-input>
+
+            <lightning-button label="Save Contact" onclick={saveContact} variant="brand" class="slds-m-top_medium"></lightning-button>
+
+            <template if:true={message}>
+                <div class="slds-m-top_medium slds-text-color_success">{message}</div>
+            </template>
+            <template if:true={error}>
+                <div class="slds-m-top_medium slds-text-color_error">{error}</div>
+            </template>
+        </div>
+    </lightning-card>
+</template>
+
+
+
+
+
+
+import { LightningElement, track } from 'lwc';
+import { createRecord } from 'lightning/uiRecordApi';
+import CONTACT_OBJECT from '@salesforce/schema/Contact';
+import FIRSTNAME_FIELD from '@salesforce/schema/Contact.FirstName';
+import LASTNAME_FIELD from '@salesforce/schema/Contact.LastName';
+import EMAIL_FIELD from '@salesforce/schema/Contact.Email';
+import PHONE_FIELD from '@salesforce/schema/Contact.Phone';
+import FAX_FIELD from '@salesforce/schema/Contact.Fax';
+
+export default class ContactFormLWC extends LightningElement {
+    @track firstName = '';
+    @track lastName = '';
+    @track email = '';
+    @track phone = '';
+    @track fax = '';
+    @track message = '';
+    @track error = '';
+
+    handleChange(event) {
+        this[event.target.name] = event.target.value;
+    }
+
+    saveContact() {
+        this.message = '';
+        this.error = '';
+
+        const fields = {};
+        fields[FIRSTNAME_FIELD.fieldApiName] = this.firstName;
+        fields[LASTNAME_FIELD.fieldApiName] = this.lastName;
+        fields[EMAIL_FIELD.fieldApiName] = this.email;
+        fields[PHONE_FIELD.fieldApiName] = this.phone;
+        fields[FAX_FIELD.fieldApiName] = this.fax;
+
+        const recordInput = { apiName: CONTACT_OBJECT.objectApiName, fields };
+
+        createRecord(recordInput)
+            .then(contact => {
+                this.message = `Contact created! ID: ${contact.id}`;
+                this.firstName = this.lastName = this.email = this.phone = this.fax = '';
+            })
+            .catch(error => {
+                this.error = `Error: ${error.body.message}`;
+            });
+    }
+}
+
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>59.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__RecordPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+</LightningComponentBundle>
+
+
+
+
+
