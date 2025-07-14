@@ -1,3 +1,32 @@
+handleRowAction(event) {
+    const actionName = event.detail.action.name;
+    const row = event.detail.row;
+
+    if (actionName === 'add_to_cart') {
+        this.dispatchEvent(new CustomEvent('addtocart', {
+            detail: {
+                id: row.id,
+                name: row.name,
+                price: row.price,
+                availableQuantity: row.availableQuantity,
+                quantity: 1
+            }
+        }));
+
+        // Optional: decrease visible quantity
+        this.products = this.products.map(p => {
+            if (p.id === row.id && p.quantity > 0) {
+                return { ...p, quantity: p.quantity - 1 };
+            }
+            return p;
+        });
+
+        this.filteredProducts = [...this.products];
+    }
+}
+
+
+
 @AuraEnabled(cacheable=true)
 public static List<PurchaseOrder__c> getPreviousOrders() {
     return [
