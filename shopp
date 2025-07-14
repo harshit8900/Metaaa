@@ -1,3 +1,16 @@
+@AuraEnabled(cacheable=true)
+public static List<PurchaseOrder__c> getPreviousOrders() {
+    return [
+        SELECT Id, Name, Status__c, OrderDate__c
+        FROM PurchaseOrder__c
+        ORDER BY OrderDate__c DESC
+        LIMIT 100
+    ];
+}
+
+
+
+
 import { LightningElement, track, wire } from 'lwc';
 import getAvailableProducts from '@salesforce/apex/ProductService.getAvailableProducts';
 
