@@ -556,3 +556,62 @@ Tools
 
 
 ChatGPT can 
+
+
+import { LightningElement, api, track } from 'lwc';
+
+export default class CartDetails extends LightningElement {
+    @api cartItems = [];
+
+    columns = [
+        { label: 'Product Name', fieldName: 'name' },
+        {
+            label: 'Quantity',
+            fieldName: 'quantity',
+            type: 'number',
+            editable: true
+        },
+        { label: 'Price', fieldName: 'price', type: 'currency' },
+        {
+            type: 'button-icon',
+            fixedWidth: 40,
+            typeAttributes: {
+                iconName: 'utility:delete',
+                name: 'delete',
+                title: 'Delete',
+                alternativeText: 'Delete',
+                variant: 'bare'
+            }
+        }
+    ];
+
+    // Called when user edits quantity cell
+    handleQuantityChange(event) {
+        const updatedItem = event.detail.draftValues[0];
+        const id = updatedItem.id;
+        const quantity = parseInt(updatedItem.quantity, 10);
+
+        this.dispatchEvent(
+            new CustomEvent('quantitychange', {
+                detail: { id, quantity }
+            })
+        );
+    }
+
+    handleRowAction(event) {
+        const action = event.detail.action.name;
+        const row = event.detail.row;
+
+        if (action === 'delete') {
+            this.dispatchEvent(
+                new CustomEvent('deleteitem', {
+                    detail: row.id
+                })
+            );
+        }
+    }
+
+    handleCheckout() {
+        this.dispatchEvent(new CustomEvent('checkout'));
+    }
+}
