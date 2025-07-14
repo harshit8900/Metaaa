@@ -1,36 +1,32 @@
 <template>
-    <lightning-card title="Cart Details">
-        <template if:true={cartItems}>
+    <!-- 🔍 Product Selection Component -->
+    <c-product-selection onaddtocart={handleAddToCart}></c-product-selection>
+
+    <!-- 🛒 Cart Table -->
+    <template if:true={cartItems.length}>
+        <lightning-card title="Cart">
             <lightning-datatable
                 key-field="id"
                 data={cartItems}
                 columns={columns}
                 onsave={handleQuantityChange}
-                onrowaction={handleRowAction}
+                onrowaction={handleDeleteItem}
                 draft-values={draftValues}
                 hide-checkbox-column>
             </lightning-datatable>
 
             <div class="slds-p-around_medium">
-                <lightning-button
-                    label="Checkout"
-                    variant="brand"
-                    onclick={handleCheckout}>
-                </lightning-button>
+                <lightning-button label="Checkout" onclick={handleCheckout} variant="brand"></lightning-button>
             </div>
-        </template>
-        <template if:false={cartItems}>
-            <p class="slds-p-around_medium">No items in cart.</p>
-        </template>
-    </lightning-card>
+        </lightning-card>
+    </template>
 </template>
 
 
-
-import { LightningElement, api, track } from 'lwc';
+import { LightningElement, track } from 'lwc';
 
 export default class CartDetails extends LightningElement {
-    @api cartItems = [];
+    @track cartItems = [];
     @track draftValues = [];
 
     columns = [
@@ -44,7 +40,7 @@ export default class CartDetails extends LightningElement {
         { label: 'Price', fieldName: 'price', type: 'currency' },
         {
             type: 'button-icon',
-            fixedWidth: 50,
+            fixedWidth: 40,
             typeAttributes: {
                 iconName: 'utility:delete',
                 name: 'delete',
@@ -55,79 +51,50 @@ export default class CartDetails extends LightningElement {
         }
     ];
 
-    handleQuantityChange(event) {
-        const updated = event.detail.draftValues;
+    // 🔁 Handle Add to Cart from child component
+    handleAddToCart(event) {
+        const product = event.detail;
+        let found = false;
 
-        updated.forEach(item => {
-            const id = item.id;
-            const quantity = parseInt(item.quantity, 10);
-
-            if (isNaN(quantity) || quantity <= 0) {
-                alert('Quantity must be a positive number.');
-                return;
+        this.cartItems = this.cartItems.map(item => {
+            if (item.id === product.id) {
+                found = true;
+                if (item.quantity + 1 <= product.availableQuantity) {
+                    item.quantity += 1;
+                }
             }
+            return item;
+        });
 
-            this.dispatchEvent(new CustomEvent('quantitychange', {
-                detail: { id, quantity }
-            }));
+        if (!found) {
+            this.cartItems = [...this.cartItems, product];
+        }
+    }
+
+    handleQuantityChange(event) {
+        const updates = event.detail.draftValues;
+
+        updates.forEach(update => {
+            const item = this.cartItems.find(p => p.id === update.id);
+            const newQty = parseInt(update.quantity, 10);
+
+            if (newQty > 0 && newQty <= item.availableQuantity) {
+                item.quantity = newQty;
+            } else {
+                alert('Quantity must be between 1 and available stock.');
+            }
         });
 
         this.draftValues = [];
     }
 
-    handleRowAction(event) {
-        const actionName = event.detail.action.name;
-        const row = event.detail.row;
-
-        if (actionName === 'delete') {
-            this.dispatchEvent(new CustomEvent('deleteitem', {
-                detail: row.id
-            }));
-        }
+    handleDeleteItem(event) {
+        const id = event.detail.row.id;
+        this.cartItems = this.cartItems.filter(item => item.id !== id);
     }
 
     handleCheckout() {
-        this.dispatchEvent(new CustomEvent('checkout'));
+        alert('Checkout complete (simulate DML here)');
+        this.cartItems = [];
     }
-}
-
-
-
-<?xml version="1.0" encoding="UTF-8"?>
-<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
-    <apiVersion>60.0</apiVersion>
-    <isExposed>true</isExposed>
-    <targets>
-        <target>lightning__AppPage</target>
-        <target>lightning__RecordPage</target>
-        <target>lightning__HomePage</target>
-    </targets>
-</LightningComponentBundle>
-
-
-
-<c-cart-details
-    cart-items={cartItems}
-    onquantitychange={handleQuantityUpdate}
-    ondeleteitem={handleDelete}
-    oncheckout={handleCheckout}>
-</c-cart-details>
-
-
-
-@track cartItems = [
-    { id: 'p1', name: 'Monitor', quantity: 1, price: 500 },
-    { id: 'p2', name: 'Mouse', quantity: 2, price: 150 }
-];
-
-handleQuantityUpdate(event) {
-    console.log('Updated Quantity:', event.detail);
-}
-
-handleDelete(event) {
-    console.log('Delete Item:', event.detail);
-}
-
-handleCheckout() {
-    console.log('Checking out...');
 }
