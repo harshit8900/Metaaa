@@ -1,3 +1,75 @@
+import { LightningElement, track, wire } from 'lwc';
+import getAvailableProducts from '@salesforce/apex/ProductService.getAvailableProducts';
+
+export default class ProductSelection extends LightningElement {
+    @track products = [];
+    @track filteredProducts = [];
+
+    columns = [
+        { label: 'Product Code', fieldName: 'code' },
+        { label: 'Product Name', fieldName: 'name' },
+        { label: 'Available Quantity', fieldName: 'quantity' },
+        { label: 'Price', fieldName: 'price', type: 'currency' },
+        {
+            type: 'button',
+            typeAttributes: {
+                label: 'Add to Cart',
+                name: 'add_to_cart',
+                title: 'Add to Cart',
+                variant: 'brand'
+            }
+        }
+    ];
+
+    @wire(getAvailableProducts)
+    wiredProducts({ data, error }) {
+        if (data) {
+            this.products = data.map(prod => ({
+                id: prod.Id,
+                name: prod.Name,
+                code: prod.ProductCode,
+                quantity: prod.Quantity__c,
+                price: prod.Price__c,
+                availableQuantity: prod.Quantity__c
+            }));
+            this.filteredProducts = [...this.products];
+        } else if (error) {
+            console.error('Error fetching products', error);
+        }
+    }
+
+    handleSearch(event) {
+        const query = event.target.value.toLowerCase();
+        this.filteredProducts = this.products.filter(p =>
+            p.name.toLowerCase().includes(query)
+        );
+    }
+
+    handleRowAction(event) {
+        if (event.detail.action.name === 'add_to_cart') {
+            const product = event.detail.row;
+
+            if (product.quantity > 0) {
+                this.dispatchEvent(
+                    new CustomEvent('addtocart', { detail: product })
+                );
+
+                // Decrease quantity in table after adding
+                this.products = this.products.map(p => {
+                    if (p.id === product.id && p.quantity > 0) {
+                        return { ...p, quantity: p.quantity - 1 };
+                    }
+                    return p;
+                });
+
+                this.filteredProducts = [...this.products];
+            }
+        }
+    }
+}
+
+
+
 ⚙️ Part 1: Apex Classes (Enterprise Pattern)
 🔹 ProductService.cls
 apex
