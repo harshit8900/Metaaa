@@ -1,0 +1,85 @@
+<template>
+    <lightning-card title="Cart Details">
+        <lightning-datatable
+            key-field="id"
+            data={cartItems}
+            columns={columns}
+            hide-checkbox-column
+            onrowaction={handleRowAction}
+            onsave={handleQuantityChange}>
+        </lightning-datatable>
+
+        <div class="slds-p-around_medium">
+            <lightning-button
+                label="Checkout"
+                variant="brand"
+                onclick={handleCheckout}>
+            </lightning-button>
+        </div>
+    </lightning-card>
+</template>
+
+
+
+
+import { LightningElement, api, track } from 'lwc';
+
+export default class CartDetails extends LightningElement {
+    @api cartItems = [];
+
+    // This array defines how your cart will be displayed
+    columns = [
+        { label: 'Product Name', fieldName: 'name' },
+        {
+            label: 'Quantity',
+            fieldName: 'quantity',
+            type: 'number',
+            editable: true
+        },
+        { label: 'Price', fieldName: 'price', type: 'currency' },
+        {
+            type: 'button-icon',
+            fixedWidth: 40,
+            typeAttributes: {
+                iconName: 'utility:delete',
+                name: 'delete',
+                title: 'Delete',
+                alternativeText: 'Delete',
+                variant: 'bare'
+            }
+        }
+    ];
+
+    // Called when user changes quantity and clicks Save
+    handleQuantityChange(event) {
+        const updatedItem = event.detail.draftValues[0];
+        const id = updatedItem.id;
+        const quantity = parseInt(updatedItem.quantity, 10);
+
+        // Dispatch event to parent (shoppingCartApp)
+        this.dispatchEvent(
+            new CustomEvent('quantitychange', {
+                detail: { id, quantity }
+            })
+        );
+    }
+
+    // Called when user clicks the delete icon
+    handleRowAction(event) {
+        const action = event.detail.action.name;
+        const row = event.detail.row;
+
+        if (action === 'delete') {
+            this.dispatchEvent(
+                new CustomEvent('deleteitem', {
+                    detail: row.id
+                })
+            );
+        }
+    }
+
+    // Called when user clicks "Checkout" button
+    handleCheckout() {
+        this.dispatchEvent(new CustomEvent('checkout'));
+    }
+}
