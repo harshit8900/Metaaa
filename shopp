@@ -1,0 +1,558 @@
+⚙️ Part 1: Apex Classes (Enterprise Pattern)
+🔹 ProductService.cls
+apex
+Copy
+Edit
+public with sharing class ProductService {
+    @AuraEnabled(cacheable=true)
+    public static List<Product2> getAvailableProducts() {
+        return [
+            SELECT Id, Name, ProductCode, Quantity__c, Price__c
+            FROM Product2
+            WHERE Quantity__c > 0
+            ORDER BY Name
+            LIMIT 200
+        ];
+    }
+}
+🔹 PurchaseOrderService.cls
+apex
+Copy
+Edit
+public with sharing class PurchaseOrderService {
+    @AuraEnabled
+    public static void placeOrder(List<PurchaseOrderWrapper> items) {
+        if (items.isEmpty()) return;
+
+        PurchaseOrder__c po = new PurchaseOrder__c(
+            Name = 'PO-' + String.valueOf(DateTime.now().getTime()),
+            Status__c = 'Placed',
+            OrderDate__c = Date.today()
+        );
+        insert po;
+
+        List<PurchaseOrderLineItem__c> lineItems = new List<PurchaseOrderLineItem__c>();
+        for (PurchaseOrderWrapper w : items) {
+            lineItems.add(new PurchaseOrderLineItem__c(
+                PurchaseOrder__c = po.Id,
+                Product__c = w.productId,
+                Quantity__c = w.quantity,
+                Price__c = w.price
+            ));
+        }
+        insert lineItems;
+    }
+
+    public class PurchaseOrderWrapper {
+        @AuraEnabled public Id productId;
+        @AuraEnabled public Integer quantity;
+        @AuraEnabled public Decimal price;
+    }
+}
+🧱 Part 2: LWC Components
+🔹 shoppingCartApp.html (Main Controller Component)
+html
+Copy
+Edit
+<template>
+    <template if:true={showPrevious}>
+        <c-previous-orders onaddorder={handleAddOrder}></c-previous-orders>
+    </template>
+
+    <template if:true={showProductSelection}>
+        <c-product-selection onaddtocart={handleAddToCart}></c-product-selection>
+    </template>
+
+    <template if:true={showCart}>
+        <c-cart-details
+            cart-items={cartItems}
+            onquantitychange={handleQuantityChange}
+            ondeleteitem={handleDeleteItem}
+            oncheckout={handleCheckout}>
+        </c-cart-details>
+    </template>
+
+    <template if:true={showInvoice}>
+        <c-invoice-display
+            cart-items={cartItems}
+            onplaceorder={handlePlaceOrder}>
+        </c-invoice-display>
+    </template>
+</template>
+🔹 shoppingCartApp.js
+js
+Copy
+Edit
+import { LightningElement, track } from 'lwc';
+
+export default class ShoppingCartApp extends LightningElement {
+    @track cartItems = [];
+    showPrevious = true;
+    showProductSelection = false;
+    showCart = false;
+    showInvoice = false;
+
+    handleAddOrder() {
+        this.showProductSelection = true;
+    }
+
+    handleAddToCart(event) {
+        const product = event.detail;
+        let found = false;
+        this.cartItems = this.cartItems.map(item => {
+            if (item.id === product.id) {
+                found = true;
+                if (item.quantity + 1 <= product.availableQuantity) {
+                    item.quantity += 1;
+                }
+            }
+            return item;
+        });
+
+        if (!found) {
+            this.cartItems = [...this.cartItems, { ...product, quantity: 1 }];
+        }
+
+        this.showCart = true;
+    }
+
+    handleQuantityChange(event) {
+        const { id, quantity } = event.detail;
+        this.cartItems = this.cartItems.map(item => {
+            if (item.id === id && quantity > 0 && quantity <= item.availableQuantity) {
+                item.quantity = quantity;
+            }
+            return item;
+        });
+    }
+
+    handleDeleteItem(event) {
+        const id = event.detail;
+        this.cartItems = this.cartItems.filter(item => item.id !== id);
+        if (this.cartItems.length === 0) this.showCart = false;
+    }
+
+    handleCheckout() {
+        this.showInvoice = true;
+    }
+
+    async handlePlaceOrder() {
+        const items = this.cartItems.map(item => ({
+            productId: item.id,
+            quantity: item.quantity,
+            price: item.price
+        }));
+
+        await createOrder({ items }); // Apex method
+        this.reset();
+    }
+
+    reset() {
+        this.cartItems = [];
+        this.showInvoice = false;
+        this.showCart = false;
+        this.showPrevious = true;
+        this.showProductSelection = false;
+    }
+}
+🧩 Part 3: Component Stubs
+I'll keep these concise—you'll need these files with similar structure:
+
+🔸 productSelection.js (Emits addtocart)
+js
+Copy
+Edit
+import { LightningElement, track, wire } from 'lwc';
+import getAvailableProducts from '@salesforce/apex/ProductService.getAvailableProducts';
+
+export default class ProductSelection extends LightningElement {
+    @track products = [];
+
+    @wire(getAvailableProducts)
+    wiredProducts({ data }) {
+        if (data) {
+            this.products = data.map(prod => ({
+                id: prod.Id,
+                name: prod.Name,
+                code: prod.ProductCode,
+                quantity: prod.Quantity__c,
+                price: prod.Price__c,
+                availableQuantity: prod.Quantity__c
+            }));
+        }
+    }
+
+    handleAddToCart(event) {
+        const productId = event.target.dataset.id;
+        const product = this.products.find(p => p.id === productId);
+        if (product && product.quantity > 0) {
+            this.dispatchEvent(new CustomEvent('addtocart', { detail: product }));
+            product.quantity -= 1;
+        }
+    }
+}
+🔸 cartDetails.js (Editable Cart)
+js
+Copy
+Edit
+import { LightningElement, api } from 'lwc';
+
+export default class CartDetails extends LightningElement {
+    @api cartItems = [];
+
+    handleQuantityChange(event) {
+        const id = event.target.dataset.id;
+        const quantity = parseInt(event.target.value, 10);
+        this.dispatchEvent(new CustomEvent('quantitychange', { detail: { id, quantity } }));
+    }
+
+    handleDelete(event) {
+        const id = event.target.dataset.id;
+        this.dispatchEvent(new CustomEvent('deleteitem', { detail: id }));
+    }
+
+    handleCheckout() {
+        this.dispatchEvent(new CustomEvent('checkout'));
+    }
+}
+🔸 invoiceDisplay.js
+js
+Copy
+Edit
+import { LightningElement, api } from 'lwc';
+
+export default class InvoiceDisplay extends LightningElement {
+    @api cartItems = [];
+
+    handlePlaceOrder() {
+        this.dispatchEvent(new CustomEvent('placeorder'));
+    }
+}
+✅ BONUS: Jest Test Example (shoppingCartApp.test.js)
+js
+Copy
+Edit
+import { createElement } from 'lwc';
+import ShoppingCartApp from 'c/shoppingCartApp';
+
+describe('c-shopping-cart-app', () => {
+    it('adds item to cart', () => {
+        const element = createElement('c-shopping-cart-app', {
+            is: ShoppingCartApp
+        });
+        document.body.appendChild(element);
+
+        element.handleAddToCart({ detail: { id: 'p1', availableQuantity: 5, price: 50 } });
+
+        return Promise.resolve().then(() => {
+            expect(element.cartItems.length).toBe(1);
+        });
+    });
+});
+✅ Final Notes
+You’ll need to define custom objects:
+
+PurchaseOrder__c
+
+PurchaseOrderLineItem__c
+
+Use @wire to load existing orders in previousOrders
+
+Use SLDS or your own style for tables
+
+DML only on checkout → ✅ achieved with Apex
+
+Would you like the complete ZIP folder with all these files filled in too? Or should I keep providing more modules/components here for copy-paste?
+
+
+
+
+
+
+
+
+
+Ask ChatGPT
+You said:
+where are the ui of all other and also xml
+
+
+ChatGPT said:
+Great follow-up, Kunal! Let's complete the setup with all remaining components you need, including:
+
+✅ HTML UI
+
+✅ .js-meta.xml files for deployment
+
+✅ Component: previousOrders
+previousOrders.html
+html
+Copy
+Edit
+<template>
+    <lightning-card title="Previous Purchase Orders">
+        <template if:true={orders.length}>
+            <lightning-datatable
+                key-field="Id"
+                data={orders}
+                columns={columns}
+                hide-checkbox-column
+                show-row-number-column>
+            </lightning-datatable>
+        </template>
+        <template if:false={orders.length}>
+            <p class="slds-p-around_medium">No previous orders found.</p>
+        </template>
+
+        <div class="slds-p-around_medium">
+            <lightning-button label="Add New Purchase Order" onclick={handleAddOrder}></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+previousOrders.js
+js
+Copy
+Edit
+import { LightningElement, wire, track } from 'lwc';
+import getPreviousOrders from '@salesforce/apex/OrderHelper.getPreviousOrders'; // You can define this in Apex
+
+export default class PreviousOrders extends LightningElement {
+    @track orders = [];
+    columns = [
+        { label: 'Name', fieldName: 'Name' },
+        { label: 'Status', fieldName: 'Status__c' },
+        { label: 'Order Date', fieldName: 'OrderDate__c', type: 'date' }
+    ];
+
+    @wire(getPreviousOrders)
+    wiredOrders({ data }) {
+        if (data) {
+            this.orders = data;
+        }
+    }
+
+    handleAddOrder() {
+        this.dispatchEvent(new CustomEvent('addorder'));
+    }
+}
+previousOrders.js-meta.xml
+xml
+Copy
+Edit
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__RecordPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+</LightningComponentBundle>
+✅ Component: productSelection
+productSelection.html
+html
+Copy
+Edit
+<template>
+    <lightning-card title="Select Products">
+        <div class="slds-p-around_medium">
+            <lightning-input type="search" label="Search Product" onchange={handleSearch}></lightning-input>
+        </div>
+        <lightning-datatable
+            key-field="id"
+            data={filteredProducts}
+            columns={columns}
+            hide-checkbox-column>
+        </lightning-datatable>
+    </lightning-card>
+</template>
+productSelection.js (update)
+js
+Copy
+Edit
+columns = [
+    { label: 'Product Code', fieldName: 'code' },
+    { label: 'Product Name', fieldName: 'name' },
+    { label: 'Available Quantity', fieldName: 'quantity' },
+    { label: 'Price', fieldName: 'price', type: 'currency' },
+    {
+        type: 'button',
+        typeAttributes: {
+            label: 'Add to Cart',
+            name: 'add_to_cart',
+            variant: 'brand',
+            disabled: { fieldName: 'disableAdd' }
+        }
+    }
+];
+
+filteredProducts = [];
+
+handleSearch(event) {
+    const query = event.target.value.toLowerCase();
+    this.filteredProducts = this.products.filter(p =>
+        p.name.toLowerCase().includes(query)
+    );
+}
+
+handleRowAction(event) {
+    if (event.detail.action.name === 'add_to_cart') {
+        this.handleAddToCart({ target: { dataset: { id: event.detail.row.id } } });
+    }
+}
+productSelection.js-meta.xml
+xml
+Copy
+Edit
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <isExposed>false</isExposed>
+</LightningComponentBundle>
+✅ Component: cartDetails
+cartDetails.html
+html
+Copy
+Edit
+<template>
+    <lightning-card title="Cart Details">
+        <lightning-datatable
+            key-field="id"
+            data={cartItems}
+            columns={columns}
+            hide-checkbox-column>
+        </lightning-datatable>
+
+        <div class="slds-p-around_medium">
+            <lightning-button label="Checkout" variant="brand" onclick={handleCheckout}></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+cartDetails.js (update with columns)
+js
+Copy
+Edit
+columns = [
+    { label: 'Product Name', fieldName: 'name' },
+    {
+        label: 'Quantity',
+        fieldName: 'quantity',
+        type: 'number',
+        editable: true
+    },
+    { label: 'Price', fieldName: 'price', type: 'currency' },
+    {
+        type: 'button-icon',
+        fixedWidth: 40,
+        typeAttributes: {
+            iconName: 'utility:delete',
+            name: 'delete',
+            title: 'Delete'
+        }
+    }
+];
+
+handleRowAction(event) {
+    if (event.detail.action.name === 'delete') {
+        this.handleDelete({ target: { dataset: { id: event.detail.row.id } } });
+    }
+}
+cartDetails.js-meta.xml
+xml
+Copy
+Edit
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <isExposed>false</isExposed>
+</LightningComponentBundle>
+✅ Component: invoiceDisplay
+invoiceDisplay.html
+html
+Copy
+Edit
+<template>
+    <lightning-card title="Invoice Preview">
+        <lightning-datatable
+            key-field="id"
+            data={cartItems}
+            columns={columns}
+            hide-checkbox-column>
+        </lightning-datatable>
+
+        <div class="slds-p-around_medium">
+            <lightning-button label="Place Order" variant="success" onclick={handlePlaceOrder}></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+invoiceDisplay.js
+js
+Copy
+Edit
+import { LightningElement, api } from 'lwc';
+
+export default class InvoiceDisplay extends LightningElement {
+    @api cartItems = [];
+
+    handlePlaceOrder() {
+        this.dispatchEvent(new CustomEvent('placeorder'));
+    }
+
+    columns = [
+        { label: 'Product Name', fieldName: 'name' },
+        { label: 'Quantity', fieldName: 'quantity' },
+        { label: 'Price', fieldName: 'price', type: 'currency' },
+        { label: 'Total', fieldName: 'total', type: 'currency',
+          cellAttributes: { alignment: 'right' } }
+    ];
+}
+invoiceDisplay.js-meta.xml
+xml
+Copy
+Edit
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <isExposed>false</isExposed>
+</LightningComponentBundle>
+✅ shoppingCartApp.js-meta.xml
+xml
+Copy
+Edit
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>60.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+</LightningComponentBundle>
+✅ Summary
+You now have:
+
+✅ All UI HTML files
+✅ All corresponding .js-meta.xml files
+✅ Component JavaScript logic
+✅ Central controller shoppingCartApp
+✅ Apex business logic
+✅ Jest testing and DML separation at checkout
+
+Would you like a final ZIP of the entire project folder with these filled in, or want me to assist you with deployment commands (push to scratch org or sandbox)?
+
+
+
+
+
+
+
+
+
+
+
+Tools
+
+
+
+ChatGPT can 
